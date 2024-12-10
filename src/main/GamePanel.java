@@ -1,0 +1,364 @@
+package main;
+
+import entity.Entity;
+import entity.Player;
+import tile.TileManager;
+import tile_interactive.InteractiveTile;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.Comparator;
+
+public class GamePanel extends JPanel implements Runnable
+{
+	// SCREEN SETTINGS
+	final int originalTileSize = 16;
+	final int scale = 3;
+	final int tileSize = originalTileSize * scale;
+
+	public int getTileSize() {return tileSize;}
+
+	final int maxScreenCol = 20;
+	final int maxScreenRow = 12;
+	public final int screenWidth = tileSize * maxScreenCol;
+	public final int screenHeight = tileSize * maxScreenRow;
+	// WORLD SETTINGS
+	public final int maxWorldCol = 50;
+	public final int maxWorldRow = 50;
+	// FULLSCREEN
+	int screenWidth2 = screenWidth;
+	int screenHeight2 = screenHeight;
+	BufferedImage tempScreen;
+	Graphics2D g2;
+	public boolean fullScreenOn = false;
+
+	//FPS
+	int FPS = 60;
+
+	//System
+	public TileManager tileM = new TileManager( this );
+	Sound sound = new Sound();
+	public KeyHandler keyH = new KeyHandler( this );
+	public CollisionDetection CD = new CollisionDetection( this );
+	public AssetSetter assetSetter = new AssetSetter( this );
+	public UI ui = new UI( this );
+	public EventHandler eventH = new EventHandler( this );
+	Thread gameThread;
+	Config config = new Config( this );
+
+	//Entity and object
+	public Player player = new Player( this, keyH );
+	public Entity[] obj = new Entity[40];
+	public Entity[] npc = new Entity[5];
+	public Entity[] monster = new Entity[40];
+	public InteractiveTile[] iTile = new InteractiveTile[50];
+	ArrayList<Entity> entityList = new ArrayList<>();
+	//public Entity[] projectile = new Entity[50];
+	public ArrayList<Entity> projectileList = new ArrayList<>();
+
+	//Game state
+	public int gameState;
+	public final int titleState = 0;
+	public final int playState = 1;
+	public final int pauseState = 2;
+	public final int dialogueState = 3;
+	public final int aboutState = 4;
+	public final int characterState = 5;
+	public final int optionsState = 6;
+	public final int gameOverState = 7;
+
+
+	public GamePanel()
+	{
+		this.setPreferredSize( new Dimension( screenWidth, screenHeight ) );
+		this.setBackground( Color.black );
+		this.setDoubleBuffered( true ); //for better performance - all the drawing from this component will be done in an offscreen painting buffer.
+		this.addKeyListener( keyH );
+		this.setFocusable( true ); //GamePanel can be focused to receive key input
+	}
+
+	public void setupGame()
+	{
+		assetSetter.setObject();
+		assetSetter.setNPC();
+		assetSetter.setMonster();
+		assetSetter.setInteractiveTile();
+		gameState = titleState;
+
+		// Instead of directing drawing in screen, we draw first in a temporary buffer and then in JPanel
+		tempScreen = new BufferedImage( screenWidth, screenHeight, BufferedImage.TYPE_INT_ARGB );
+		g2 = (Graphics2D) tempScreen.getGraphics();
+
+		if (fullScreenOn)
+		{
+			setFullScreen();
+		}
+	}
+
+	public void retry()
+	{
+		player.setDefaultPositions();
+		player.restoreLifeAndMana();
+		assetSetter.setMonster();
+		assetSetter.setNPC();
+	}
+
+	public void restart()
+	{
+		player.setDefaultValues();
+		player.setItems();
+		assetSetter.setObject();
+		assetSetter.setNPC();
+		assetSetter.setMonster();
+		assetSetter.setInteractiveTile();
+	}
+
+	public void setFullScreen()
+	{
+		Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+		double width = screenSize.getWidth();
+		double height = screenSize.getHeight();
+		Main.window.setExtendedState( JFrame.MAXIMIZED_BOTH );
+		screenWidth2 = (int) width;
+		screenHeight2 = (int) height;
+	}
+
+	public void starGameThread()
+	{
+		gameThread = new Thread( this ); //Passing GamePanel
+		gameThread.start();
+	}
+
+	@Override
+	public void run()
+	{
+		double drawInterval = (double) 1000000000 / FPS;
+		double delta = 0;
+		long lastTime = System.nanoTime();
+		long currentTime;
+		long timer = 0;
+		int drawCount = 0;
+
+		while (gameThread != null)
+		{
+			currentTime = System.nanoTime();
+
+			delta += (currentTime - lastTime) / drawInterval;
+			timer += (currentTime - lastTime);
+			lastTime = currentTime;
+
+			if (delta >= 1)
+			{
+				update();
+				drawToTempScreen();
+				drawToScreen();
+				delta--;
+				drawCount++;
+			}
+			if (timer >= 1000000000)
+			{
+				drawCount = 0;
+				timer = 0;
+			}
+		}
+	}
+
+	public void update()
+	{
+		if (gameState == playState)
+		{
+			//player
+			player.update();
+			//npc
+			for (Entity entity : npc)
+			{
+				if (entity != null)
+				{
+					entity.update();
+				}
+			}
+			//projectile
+			for (int i = 0; i < projectileList.size(); i++)
+			{
+				if (projectileList.get( i ) != null)
+				{
+					if (projectileList.get( i ).alive)
+					{
+						projectileList.get( i ).update();
+					}
+					if (!projectileList.get( i ).alive)
+					{
+						projectileList.remove( i );
+					}
+				}
+			}
+			//monster
+			for (int i = 0; i < monster.length; i++)
+			{
+				if (monster[i] != null)
+				{
+					if (monster[i].alive && !monster[i].dying)
+					{
+						monster[i].update();
+					}
+					if (!monster[i].alive)
+					{
+						monster[i].checkDrop();
+						monster[i] = null;
+					}
+				}
+			}
+			for (InteractiveTile interactiveTile : iTile)
+			{
+				if (interactiveTile != null)
+				{
+					interactiveTile.update();
+				}
+			}
+		}
+		if (gameState == pauseState)
+		{
+			//handle later
+		}
+
+	}
+
+	public void drawToTempScreen()
+	{
+		g2.clearRect( 0, 0, screenWidth2, screenHeight2 );
+		//Title screen
+		if (gameState == titleState)
+		{
+			ui.draw( g2 );
+		}
+		else
+		{
+			//Debug
+			long drawStart = 0;
+			if (keyH.DebugConsole)
+			{
+				drawStart = System.nanoTime();
+			}
+			//Tile
+			tileM.draw( g2 );
+			//Interactive tiles
+			for (InteractiveTile interactiveTile : iTile)
+			{
+				if (interactiveTile != null)
+				{
+					interactiveTile.draw( g2 );
+				}
+			}
+			//player
+			entityList.add( player );
+			//npcs
+			for (Entity entity : npc)
+			{
+				if (entity != null)
+				{
+					entityList.add( entity );
+				}
+			}
+			//objects
+			for (Entity entity : obj)
+			{
+				if (entity != null)
+				{
+					entityList.add( entity );
+				}
+			}
+			//monsters
+			for (Entity entity : monster)
+			{
+				if (entity != null)
+				{
+					entityList.add( entity );
+				}
+			}
+			//projectiles
+			for (Entity entity : projectileList)
+			{
+				if (entity != null)
+				{
+					entityList.add( entity );
+				}
+			}
+			//sort
+			entityList.sort( Comparator.comparingInt( e -> e.worldY ) );
+			//draw entities
+			for (Entity e : entityList)
+			{
+				e.draw( g2 );
+			}
+			entityList.clear();
+			//UI
+			ui.draw( g2 );
+			//debug
+			if (keyH.DebugConsole)
+			{
+				long drawEnd = System.nanoTime();
+				long passed = drawEnd - drawStart;
+
+				g2.setFont( new Font( "Arial", Font.PLAIN, 20 ) );
+				g2.setColor( Color.white );
+
+				int x = 10;
+				int y = 400;
+				int lineHeight = 30;
+				g2.drawString( "WorldX: " + player.worldX, x, y );
+				y += lineHeight;
+				g2.drawString( "WorldY: " + player.worldY, x, y );
+				y += lineHeight;
+				g2.drawString( "Col(x): " + (player.worldX + player.solidArea.x) / tileSize, x, y );
+				y += lineHeight;
+				g2.drawString( "Row(y): " + (player.worldY + player.solidArea.y) / tileSize, x, y );
+				y += lineHeight;
+
+				g2.drawString( "Passed: " + passed, x, y );
+			}
+		}
+	}
+
+	public void drawToScreen()
+	{
+		Graphics g = getGraphics();
+		g.drawImage( tempScreen, 0, 0, screenWidth2, screenHeight2, null );
+		g.dispose();
+	}
+
+	//music
+	public void playMusic(int i)
+	{
+		sound.setMusicFile( i ); // Set the file for the music clip
+		sound.playMusic(); // Play the music clip
+		sound.loopMusic(); // Loop the music clip
+	}
+
+	public void stopMusic()
+	{
+		sound.stopMusic(); // Stop the music clip
+	}
+
+	public void playSE(int i)
+	{
+		sound.setEffectFile( i ); // Set the file for the effect clip
+		sound.playEffect(); // Play the effect clip
+	}
+
+	public void pauseMusic()
+	{
+		sound.pauseMusic(); // Pause only the music clip
+	}
+
+	public void resumeMusic()
+	{
+		sound.resumeMusic(); // Resume only the music clip
+	}
+
+	public void setVolume(float volume)
+	{
+		sound.setVolume( volume ); // Adjust volume for the music clip
+	}
+}

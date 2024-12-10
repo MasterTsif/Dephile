@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" build-on-make="true" name="Defile:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/Defile_jar</output-path>
+    <root id="archive" name="Defile.jar">
+      <element id="module-output" name="Defile" />
+    </root>
+  </artifact>
+</component>

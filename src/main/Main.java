@@ -1,0 +1,44 @@
+package main;
+
+import javax.swing.*;
+import java.util.Objects;
+
+public class Main
+{
+	public static JFrame window;
+
+	public static void main(String[] args)
+	{
+		window = new JFrame();
+		window.setDefaultCloseOperation( JFrame.EXIT_ON_CLOSE ); // Exit the program when the window is closed
+		window.setResizable( false ); //Cannot resize window
+		window.setTitle( "Defile" ); //Title of the window
+		new Main().setIcon();
+
+		GamePanel gamePanel = new GamePanel(); //Create a new game panel
+		window.add( gamePanel ); //Add the game panel to the window
+
+		gamePanel.config.loadConfig();
+		if (gamePanel.fullScreenOn)
+		{
+			window.setUndecorated( true ); // Remove the title bar
+		}
+
+		window.pack(); //Resize the window to fit the content
+
+		window.setLocationRelativeTo( null ); //Center the window
+		window.setVisible( true );
+
+		//Before starting the game set the objects
+		gamePanel.setupGame();
+
+		//Start the game
+		gamePanel.starGameThread();
+	}
+
+	public void setIcon()
+	{
+		ImageIcon icon = new ImageIcon( Objects.requireNonNull( getClass().getClassLoader().getResource( "player/down-right.png" ) ) );
+		window.setIconImage( icon.getImage() );
+	}
+}

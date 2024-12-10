@@ -1,0 +1,92 @@
+package entity;
+
+import main.GamePanel;
+
+import java.util.Random;
+
+public class NPC_Sand extends Entity
+{
+
+	private static final int SOLID_AREA_X = 10;
+	private static final int SOLID_AREA_Y = 0;
+	private static final int SOLID_AREA_WIDTH = 48;
+	private static final int SOLID_AREA_HEIGHT = 48;
+
+	public NPC_Sand(GamePanel gp)
+	{
+		super( gp );
+		direction = "down";
+		speed = 1;
+		setupSolidArea();
+		loadImages();
+		loadDialogues();
+	}
+
+	private void setupSolidArea()
+	{
+		solidArea.x = SOLID_AREA_X;
+		solidArea.y = SOLID_AREA_Y;
+		solidArea.width = SOLID_AREA_WIDTH;
+		solidArea.height = SOLID_AREA_HEIGHT;
+		solidAreaDefaultX = solidArea.x;
+		solidAreaDefaultY = solidArea.y;
+	}
+
+	private void loadImages()
+	{
+		int tileSize = gp.getTileSize();
+		up1 = setup( "/npc/sand/up-left", tileSize, tileSize );
+		up2 = setup( "/npc/sand/up-right", tileSize, tileSize );
+		down1 = setup( "/npc/sand/down-left", tileSize, tileSize );
+		down2 = setup( "/npc/sand/down-right", tileSize, tileSize );
+		left1 = setup( "/npc/sand/left-left", tileSize, tileSize );
+		left2 = setup( "/npc/sand/left-right", tileSize, tileSize );
+		right1 = setup( "/npc/sand/right-left", tileSize, tileSize );
+		right2 = setup( "/npc/sand/right-right", tileSize, tileSize );
+	}
+
+	private void loadDialogues()
+	{
+		dialogues[0] = "0/6. I am bound to these waters, a prisoner of\nthe tide. No way out remains for one\nsuch as I.";
+		dialogues[1] = "1/6. Beware, traveler, the shifting sands conspire\nto snare your steps. Time is your\nenemy.";
+		dialogues[2] = "2/6. The keys, oh seeker of freedom—each one a\nfragment of hope. They hide in shadows,\nand one lies below.";
+		dialogues[3] = "3/6. Should you find the key, tread carefully.\nDoors opened may lead not to escape,\nbut to deeper shadows.";
+		dialogues[4] = "4/6. The waters may mend your wounds, yet they\ncradle no loyalty. They heal both the\njust and the wicked.";
+	}
+
+	@Override
+	public void setAction()
+	{
+		actionLockCounter++;
+		if (actionLockCounter == 120)
+		{
+			Random random = new Random();
+			int chance = random.nextInt( 100 ) + 1;
+
+			if (chance <= 25)
+			{
+				direction = "up";
+			}
+			else if (chance <= 50)
+			{
+				direction = "down";
+			}
+			else if (chance <= 75)
+			{
+				direction = "left";
+			}
+			else
+			{
+				direction = "right";
+			}
+
+			actionLockCounter = 0;
+		}
+	}
+
+	@Override
+	public void speak()
+	{
+		super.speak();
+	}
+}

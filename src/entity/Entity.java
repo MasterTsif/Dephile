@@ -1,0 +1,437 @@
+package entity;
+
+import main.GamePanel;
+import main.UtilityTool;
+
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.util.Objects;
+
+public class Entity
+{
+	GamePanel gp;
+	//IMAGES
+	public BufferedImage up1, up2, down1, down2, left1, left2, right1, right2;
+	public BufferedImage attackUp1, attackUp2, attackDown1, attackDown2, attackLeft1, attackLeft2, attackRight1, attackRight2;
+	public BufferedImage image, image2, image3;
+	//SOLID AREA
+	public Rectangle solidArea = new Rectangle( 0, 0, 48, 48 );
+	public int solidAreaDefaultX, solidAreaDefaultY;
+	//ATTACK AREA
+	public Rectangle attackArea = new Rectangle( 0, 0, 0, 0 );
+	//COLLISION
+	public boolean collision = false;
+	//DIALOGUE
+	String[] dialogues = new String[20];
+	//STATE
+	public int worldX, worldY;
+	public String direction = "down";
+	public int spriteNumber = 1;
+	int dialogueIndex = 0;
+	public boolean collisionOn = false;
+	public boolean invincible = false;
+	public boolean attacking = false;
+	public boolean alive = true;
+	public boolean dying = false;
+	public boolean hpBarOn = false;
+	//COUNTER
+	public int spriteCounter = 0;
+	public int actionLockCounter = 0;
+	public int invincibilityCounter = 0;
+	public int dyingCounter = 0;
+	public int hpBarCounter = 0;
+	public int shotAvailabilityCounter = 0;
+	//CHARACTER ATTRIBUTES
+	public String name;
+	public int speed;
+	public int maxSpeed;
+	public int maxLife;
+	public int maxMana;
+	public int mana;
+	public int ammo;
+	public int life;
+	public int level;
+	public int strength;
+	public int dexterity;
+	public int attack;
+	public int defence;
+	public int exp;
+	public int nextLevelExp;
+	public int coin;
+	public Entity currentWeapon;
+	public Entity currentShield;
+	public Projectile projectile;
+	//ITEM ATTRIBUTES
+	public int value;
+	public int attackValue;
+	public int defenseValue;
+	public String description = "";
+	public int useCost;
+	//TYPE
+	public int type;
+	public final int type_player = 0;
+	public final int type_npc = 1;
+	public final int type_monster = 2;
+	public final int type_sword = 3;
+	public final int type_axe = 4;
+	public final int type_shield = 5;
+	public final int type_consumable = 6;
+	public final int type_pickupOnly = 7;
+	public final int type_obstacle = 8;
+
+	// CONSTRUCTOR
+	public Entity(GamePanel gp)
+	{
+		this.gp = gp;
+	}
+
+	// TO BE OVERWRITTEN
+	public void setAction() {}
+
+	public boolean use(Entity entity) {return false;}
+
+	public void damageReaction() {}
+
+	public void speak()
+	{
+		if (dialogues[dialogueIndex] == null)
+		{
+			dialogueIndex = 0;
+		}
+		gp.ui.currentDialogue = dialogues[dialogueIndex];
+		dialogueIndex++;
+
+		switch (gp.player.direction)
+		{
+			case "up":
+				direction = "down";
+				break;
+			case "down":
+				direction = "up";
+				break;
+			case "left":
+				direction = "right";
+				break;
+			case "right":
+				direction = "left";
+				break;
+		}
+	}
+
+	public void interact() {}
+
+	public void checkDrop() {}
+
+	// UPDATE
+	public void update()
+	{
+		setAction();
+		boolean contactPlayer = gp.CD.checkPlayer( this );
+
+		// Reset collision status before checking
+		collisionOn = false;
+		checkCollisions();
+
+		//when monster collides with player
+		if (this.type == type_monster && contactPlayer)
+		{
+			handleMonsterPlayerContact( attack );
+		}
+
+		//movement
+		if (!collisionOn)
+		{
+			moveEntity();
+		}
+		//Animation
+		updateAnimation();
+		if (shotAvailabilityCounter < 30)
+		{
+			shotAvailabilityCounter++;
+		}
+		//Invincibility
+		updateInvincibility();
+	}
+
+	public void handleMonsterPlayerContact(int attack)
+	{
+		if (!gp.player.invincible)
+		{
+			int damage = attack - gp.player.defence;
+			if (damage < 0)
+			{
+				damage = 0;
+			}
+			gp.player.life -= damage;
+			gp.player.invincible = true;
+		}
+	}
+
+	private void checkCollisions()
+	{
+		gp.CD.checkTile( this );
+		gp.CD.checkObject( this, false );
+		gp.CD.checkEntity( this, gp.npc );
+		gp.CD.checkEntity( this, gp.monster );
+		gp.CD.checkEntity( this, gp.iTile );
+	}
+
+	private void moveEntity()
+	{
+		switch (direction)
+		{
+			case "up" -> worldY -= speed;
+			case "down" -> worldY += speed;
+			case "left" -> worldX -= speed;
+			case "right" -> worldX += speed;
+		}
+	}
+
+	private void updateAnimation()
+	{
+		spriteCounter++;
+		if (spriteCounter > 12)
+		{
+			spriteNumber = (spriteNumber == 1) ? 2 : 1;
+			spriteCounter = 0;
+		}
+	}
+
+	private void updateInvincibility()
+	{
+		if (invincible)
+		{
+			invincibilityCounter++;
+			if (invincibilityCounter > 40)
+			{
+				invincibilityCounter = 0;
+				invincible = false;
+			}
+		}
+	}
+	//end of total update
+
+	public void draw(Graphics2D g2)
+	{
+		int screenX = worldX - gp.player.worldX + gp.player.getScreenX();
+		int screenY = worldY - gp.player.worldY + gp.player.getScreenY();
+
+		// Render only if entity is within the screen boundaries
+		if (isWithinScreen())
+		{
+			BufferedImage image = getImageForDirection();
+
+			// Draw health bar if applicable
+			if (type == type_monster && hpBarOn)
+			{
+				drawHealthBar( g2, screenX, screenY );
+			}
+
+			// Apply invincibility effects if applicable
+			if (invincible)
+			{
+				handleInvincibility( g2 );
+			}
+
+			// Handle dying animation
+			if (dying)
+			{
+				dyingAnimation( g2 );
+			}
+
+			// Draw the entity image
+			g2.drawImage( image, screenX, screenY, null );
+
+			// Reset transparency after drawing invincibility effects
+			resetAlpha( g2 );
+
+			// Draw debug visuals for collision area
+			//drawDebugCollisionArea( g2, screenX, screenY );
+		}
+	}
+
+	// Helper Method: Checks if the entity is within screen bounds for optimized rendering
+	private boolean isWithinScreen()
+	{
+		return worldX + gp.getTileSize() > gp.player.worldX - gp.player.getScreenX() && worldX - gp.getTileSize() < gp.player.worldX + gp.player.getScreenX() && worldY + gp.getTileSize() > gp.player.worldY - gp.player.getScreenY() && worldY - gp.getTileSize() < gp.player.worldY + gp.player.getScreenY();
+	}
+
+	// Helper Method: Get the correct image for the current direction and sprite
+	private BufferedImage getImageForDirection()
+	{
+		return switch (direction)
+		{
+			case "up" -> (spriteNumber == 1) ? up1 : up2;
+			case "down" -> (spriteNumber == 1) ? down1 : down2;
+			case "left" -> (spriteNumber == 1) ? left1 : left2;
+			case "right" -> (spriteNumber == 1) ? right1 : right2;
+			default -> null;
+		};
+	}
+
+	// Helper Method: Draw the health bar for monster-type entities
+	private void drawHealthBar(Graphics2D g2, int screenX, int screenY)
+	{
+		double hpScale = (double) gp.getTileSize() / maxLife;
+		double hpBarWidth = hpScale * life;
+
+		// Outline of health bar
+		g2.setColor( new Color( 35, 35, 35 ) );
+		g2.fillRect( screenX - 1, screenY - 16, gp.getTileSize() + 2, 12 );
+
+		// Health bar fill
+		g2.setColor( new Color( 255, 0, 30 ) );
+		g2.fillRect( screenX, screenY - 15, (int) hpBarWidth, 10 );
+
+		// Hide health bar after 2 seconds
+		hpBarCounter++;
+		if (hpBarCounter > 120)
+		{
+			hpBarCounter = 0;
+			hpBarOn = false;
+		}
+	}
+
+	// Helper Method: Handle invincibility effects
+	private void handleInvincibility(Graphics2D g2)
+	{
+		hpBarOn = true;
+		hpBarCounter = 0;
+		changeAlpha( g2, 0.4f ); // Make the entity semi-transparent
+	}
+
+	// Helper Method: Draw debug visuals for collision area
+	private void drawDebugCollisionArea(Graphics2D g2, int screenX, int screenY)
+	{
+		g2.setColor( Color.red );
+		g2.drawRect( screenX + solidArea.x, screenY + solidArea.y, solidArea.width, solidArea.height );
+	}
+
+	private void dyingAnimation(Graphics2D g2)
+	{
+		dyingCounter++;
+		int i = 5;
+		if (dyingCounter <= i) {changeAlpha( g2, 0f );}
+		if (dyingCounter > i && dyingCounter <= i * 2) {changeAlpha( g2, 1f );}
+		if (dyingCounter > i * 2 && dyingCounter <= i * 3) {changeAlpha( g2, 0f );}
+		if (dyingCounter > i * 3 && dyingCounter <= i * 4) {changeAlpha( g2, 1f );}
+		if (dyingCounter > i * 4 && dyingCounter <= i * 5) {changeAlpha( g2, 0f );}
+		if (dyingCounter > i * 5)
+		{
+			alive = false;
+		}
+	}
+
+	private void changeAlpha(Graphics2D g2, float alpha)
+	{
+		g2.setComposite( AlphaComposite.getInstance( AlphaComposite.SRC_OVER, alpha ) );
+	}
+
+	private void resetAlpha(Graphics2D g2)
+	{
+		changeAlpha( g2, 1f );
+	}
+
+	// FOR SOME OBJECTS
+	public void dropItem(Entity droppedItem)
+	{
+		for (int i = 0; i < gp.obj.length; i++)
+		{
+			if (gp.obj[i] == null)
+			{
+				gp.obj[i] = droppedItem;
+				gp.obj[i].worldX = worldX; //dead monsters position
+				gp.obj[i].worldY = worldY;
+				break;
+			}
+		}
+	}
+
+	public int getDetected(Entity user, Entity[] target, String targetName)
+	{
+		int index = 999;
+
+		//Check the surrounding object
+		int nextWorldX = user.getLeftX();
+		int nextWorldY = user.getTopY();
+
+		switch (user.direction)
+		{
+			case "up":
+				nextWorldY = user.getTopY() - user.speed;
+				break;
+			case "down":
+				nextWorldY = user.getBottomY() + user.speed;
+				break;
+			case "left":
+				nextWorldX = user.getLeftX() - user.speed;
+				break;
+			case "right":
+				nextWorldX = user.getRightX() + user.speed;
+				break;
+		}
+		int col = nextWorldX / gp.getTileSize();
+		int row = nextWorldY / gp.getTileSize();
+
+		for (int i = 0; i < target.length; i++)
+		{
+			if (target[i] != null)
+			{
+				if (col == target[i].getCol() && row == target[i].getRow() && Objects.equals( target[i].name, targetName ))
+				{
+					index = i;
+					break;
+				}
+			}
+		}
+		return index;
+	}
+
+	public int getLeftX()
+	{
+		return worldX + solidArea.x;
+	}
+
+	public int getRightX()
+	{
+		return worldX + solidArea.x + solidArea.width;
+	}
+
+	public int getTopY()
+	{
+		return worldY + solidArea.y;
+	}
+
+	public int getBottomY()
+	{
+		return worldY + solidArea.y + solidArea.height;
+	}
+
+	public int getCol()
+	{
+		return (worldX + solidArea.x) / gp.getTileSize();
+	}
+
+	public int getRow()
+	{
+		return (worldY + solidArea.y) / gp.getTileSize();
+	}
+
+	public BufferedImage setup(String imagePath, int width, int height)
+	{
+		UtilityTool uTool = new UtilityTool();
+		BufferedImage image = null;
+		try
+		{
+			image = ImageIO.read( Objects.requireNonNull( getClass().getResourceAsStream( imagePath + ".png" ) ) );
+			image = uTool.scaleImage( image, width, height );
+		} catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+		return image;
+	}
+
+}
